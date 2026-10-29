@@ -1,0 +1,20 @@
+# segredos
+.env
+.env.*
+!.env.example
+
+# dependências e caches
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# saídas locais
+*.log
+saida*.xlsx
+.DS_Store
+Thumbs.db
+
+# anexos reais de fornecedores (passo 5 do README)
+compartilhado/

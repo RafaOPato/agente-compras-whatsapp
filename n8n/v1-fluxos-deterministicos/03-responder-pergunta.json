@@ -1,0 +1,141 @@
+{
+  "id": "compras-v1-responder-pergunta",
+  "name": "Compras v1 - Responder Duvida",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "03000000-0000-4000-8000-000000000001",
+      "name": "Entrada da Resposta do Engenheiro",
+      "typeVersion": 1.1,
+      "position": [
+        -340,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id AS id_pergunta, p.texto_pergunta, p.id_fornecedor, p.id_cotacao,\n       f.conversa_id AS conversa_fornecedor, f.nome AS nome_fornecedor, c.codigo AS codigo_cotacao\n  FROM pergunta p\n  JOIN cotacao c ON c.id = p.id_cotacao\n  JOIN fornecedor f ON f.id = p.id_fornecedor\n WHERE c.id_engenheiro = $1::int\n   AND p.status = 'aberta'\n ORDER BY p.registrado_em DESC\n LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.id_engenheiro] }}"
+        }
+      },
+      "id": "03000000-0000-4000-8000-000000000002",
+      "name": "Achar Duvida Aberta",
+      "typeVersion": 2.5,
+      "position": [
+        -120,
+        300
+      ],
+      "notes": "Sem duvida 'aberta' (corrida rara entre mensagens) a query volta vazia e o fluxo termina aqui.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pergunta\n   SET status = 'respondida', texto_resposta = $2, respondeu_em = NOW()\n WHERE id = $1::int\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$json.id_pergunta, $('Entrada da Resposta do Engenheiro').first().json.texto] }}"
+        }
+      },
+      "id": "03000000-0000-4000-8000-000000000003",
+      "name": "Fechar Duvida",
+      "typeVersion": 2.5,
+      "position": [
+        100,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada da Resposta do Engenheiro').first().json.session || 'compras', chatId: $('Achar Duvida Aberta').first().json.conversa_fornecedor, text: 'Sobre a cotacao ' + $('Achar Duvida Aberta').first().json.codigo_cotacao + ', o responsavel respondeu a sua duvida (\"' + $('Achar Duvida Aberta').first().json.texto_pergunta + '\"):\\n\\n' + $('Entrada da Resposta do Engenheiro').first().json.texto + '\\n\\nPode continuar a proposta com base nessa resposta.' }) }}",
+        "options": {}
+      },
+      "id": "03000000-0000-4000-8000-000000000004",
+      "name": "WAHA - Devolver Resposta ao Fornecedor",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        300
+      ],
+      "notes": "Usa a credencial Header Auth do WAHA, a mesma do fluxo de abertura.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    }
+  ],
+  "connections": {
+    "Entrada da Resposta do Engenheiro": {
+      "main": [
+        [
+          {
+            "node": "Achar Duvida Aberta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achar Duvida Aberta": {
+      "main": [
+        [
+          {
+            "node": "Fechar Duvida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fechar Duvida": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Devolver Resposta ao Fornecedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

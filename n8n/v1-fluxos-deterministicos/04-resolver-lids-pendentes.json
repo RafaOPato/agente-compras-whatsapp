@@ -1,0 +1,135 @@
+{
+  "id": "compras-v1-resolver-lids",
+  "name": "Compras v1 - LID a cada 5 min",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "05000000-0000-4000-8000-000000000001",
+      "name": "Agendador 5 min",
+      "typeVersion": 1.2,
+      "position": [
+        -360,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, conversa_id\n  FROM fornecedor\n WHERE ativo AND conversa_lid IS NULL;"
+      },
+      "id": "05000000-0000-4000-8000-000000000002",
+      "name": "Listar Fornecedores sem LID",
+      "typeVersion": 2.5,
+      "position": [
+        -140,
+        300
+      ],
+      "notes": "Lista apenas fornecedores com conversa_lid vazio; os que ja foram resolvidos ficam de fora da consulta.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'http://waha:3000/api/compras/lids/pn/' + encodeURIComponent($json.conversa_id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "05000000-0000-4000-8000-000000000003",
+      "name": "Consultar LID",
+      "typeVersion": 4.2,
+      "position": [
+        80,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Autentica com a mesma credencial Header Auth do WAHA. Numero que nao resolve nao interrompe nada (onError=continue): o fornecedor segue sem LID e entra de novo na rodada seguinte, 5 min depois.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE fornecedor\n   SET conversa_lid = $2::text\n WHERE id = $1::int AND $2::text IS NOT NULL\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Listar Fornecedores sem LID').all()[$itemIndex].json.id, $json.lid || null] }}"
+        }
+      },
+      "id": "05000000-0000-4000-8000-000000000004",
+      "name": "Salvar LID Consultado",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        300
+      ],
+      "notes": "O LID consultado e ligado ao fornecedor pelo $itemIndex em vez de .item, porque depois de um no com onError=continue o pareamento por .item pode apontar para a linha errada.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    }
+  ],
+  "connections": {
+    "Agendador 5 min": {
+      "main": [
+        [
+          {
+            "node": "Listar Fornecedores sem LID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Fornecedores sem LID": {
+      "main": [
+        [
+          {
+            "node": "Consultar LID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar LID": {
+      "main": [
+        [
+          {
+            "node": "Salvar LID Consultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

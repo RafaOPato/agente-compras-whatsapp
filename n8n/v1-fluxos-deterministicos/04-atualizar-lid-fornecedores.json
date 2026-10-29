@@ -1,0 +1,135 @@
+{
+  "id": "compras-v1-atualizar-lid",
+  "name": "Compras v1 - LID a cada 2 min",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "04000000-0000-4000-8000-000000000001",
+      "name": "Agendador 2 min",
+      "typeVersion": 1.2,
+      "position": [
+        -300,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, conversa_id\n  FROM fornecedor\n WHERE ativo AND COALESCE(conversa_lid, '') = '';"
+      },
+      "id": "04000000-0000-4000-8000-000000000002",
+      "name": "Listar Fornecedores sem LID",
+      "typeVersion": 2.5,
+      "position": [
+        -80,
+        300
+      ],
+      "notes": "Lista apenas fornecedores com conversa_lid vazio; os que ja foram resolvidos ficam de fora da consulta.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://waha:3000/api/compras/lids/pn/{{ encodeURIComponent($json.conversa_id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "04000000-0000-4000-8000-000000000003",
+      "name": "Consultar LID",
+      "typeVersion": 4.2,
+      "position": [
+        140,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "A consulta usa sempre a sessao 'compras'. Se o numero ainda nao tiver conta no WhatsApp, onError=continue deixa o item sem LID e ele volta na proxima rodada; o fluxo nao cai.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE fornecedor\n   SET conversa_lid = $2::text\n WHERE id = $1::int AND $2::text IS NOT NULL;",
+        "options": {
+          "queryReplacement": "={{ [$('Listar Fornecedores sem LID').all()[$itemIndex].json.id, $json.lid || null] }}"
+        }
+      },
+      "id": "04000000-0000-4000-8000-000000000004",
+      "name": "Gravar LID",
+      "typeVersion": 2.5,
+      "position": [
+        360,
+        300
+      ],
+      "notes": "So um UPDATE, sem RETURNING nem SELECT: e o ultimo no do fluxo e nenhum outro espera linhas dele.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    }
+  ],
+  "connections": {
+    "Agendador 2 min": {
+      "main": [
+        [
+          {
+            "node": "Listar Fornecedores sem LID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Fornecedores sem LID": {
+      "main": [
+        [
+          {
+            "node": "Consultar LID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar LID": {
+      "main": [
+        [
+          {
+            "node": "Gravar LID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

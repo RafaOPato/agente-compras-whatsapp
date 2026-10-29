@@ -1,0 +1,421 @@
+{
+  "id": "compras-v1-nova-cotacao",
+  "name": "Compras v1 - Abrir Cotacao",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "01000000-0000-4000-8000-000000000001",
+      "name": "Entrada do Roteador",
+      "typeVersion": 1.1,
+      "position": [
+        -360,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'openai/gpt-oss-120b',\n  response_format: { type: 'json_object' },\n  reasoning_effort: 'low',\n  messages: [\n    { role: 'system', content: [\n      'Tarefa: converter a mensagem de WhatsApp de um engenheiro de obra, pedindo material de construcao, numa lista de itens para cotar com fornecedores.',\n      'Como montar a lista:',\n      '- um item para cada material citado, com a quantidade e a unidade (ou embalagem) quando a mensagem trouxer;',\n      '- mantenha as palavras do engenheiro: nome do produto, marca, giria e embalagem (balde, lata, saco, rolo, galao, caixa, pacote, metro, kg e assim por diante). Ajuste somente o plural pelo numero (1 balde, 30 sacos);',\n      '- nao use sinonimo, nao encaixe a unidade numa lista fechada e nao corrija nome de produto ou marca, por mais estranho que pareca; so arrume erro evidente de gramatica no resto do texto;',\n      '- informacao que nao esta na mensagem vira null, sem suposicao;',\n      '- se a mensagem citar obra, empreendimento ou endereco, copie para o campo obra; senao obra e null.',\n      'Saida: apenas JSON valido, sem texto antes nem depois, no formato {\"obra\": string ou null, \"itens\": [{\"descricao\": string, \"unidade\": string ou null, \"quantidade\": number ou null}]}.',\n      'Exemplo 1. Mensagem: \"preciso de 20 latas de tinta e 4 rolos de manta\" => {\"obra\": null, \"itens\": [{\"descricao\": \"tinta\", \"unidade\": \"latas\", \"quantidade\": 20}, {\"descricao\": \"manta\", \"unidade\": \"rolos\", \"quantidade\": 4}]}',\n      'Exemplo 2. Mensagem: \"manda 1 caixa de azulejo 60x60 pra Residencial Aurora\" => {\"obra\": \"Residencial Aurora\", \"itens\": [{\"descricao\": \"azulejo 60x60\", \"unidade\": \"caixa\", \"quantidade\": 1}]}'\n    ].join('\\n') },\n    { role: 'user', content: $json.texto }\n  ]\n}) }}",
+        "options": {
+          "timeout": 120000
+        },
+        "url": "https://api.groq.com/openai/v1/chat/completions"
+      },
+      "id": "01000000-0000-4000-8000-000000000002",
+      "name": "Groq - Listar Itens do Pedido",
+      "typeVersion": 4.2,
+      "position": [
+        -140,
+        300
+      ],
+      "notes": "Usa a conta gratuita da Groq (console.groq.com) com credencial Bearer Auth. O parametro response_format json_object faz o modelo responder sempre com JSON bem formado.",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Groq - Chave (Bearer Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// A Groq responde no formato da OpenAI: o JSON util vem como texto em choices[0].message.content.\nconst conteudo = $json.choices?.[0]?.message?.content;\nif (!conteudo) {\n  throw new Error('Groq respondeu sem choices: ' + JSON.stringify($json));\n}\n\nconst { obra = null, itens } = JSON.parse(conteudo);\n\nif (!Array.isArray(itens) || itens.length < 1) {\n  throw new Error('A mensagem do engenheiro nao trouxe nenhum item reconhecivel.');\n}\n\nreturn [{ json: { obra, itens } }];"
+      },
+      "id": "01000000-0000-4000-8000-000000000003",
+      "name": "Ler JSON da Extracao",
+      "typeVersion": 2,
+      "position": [
+        80,
+        300
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH proximo AS (\n  SELECT nextval('cotacao_id_seq') AS n\n)\nINSERT INTO cotacao (id, codigo, id_engenheiro, obra, texto_pedido, status, limite_resposta)\nSELECT n,\n       format('COT-%s-%s', to_char(now(), 'YYMMDD'), lpad(n::text, 4, '0')),\n       $1::int, $2::text, $3::text, 'aberta', now() + interval '1 day'\n  FROM proximo\nRETURNING id, codigo;",
+        "options": {
+          "queryReplacement": "={{ [$('Entrada do Roteador').first().json.id_engenheiro, $json.obra, $('Entrada do Roteador').first().json.texto] }}"
+        }
+      },
+      "id": "01000000-0000-4000-8000-000000000004",
+      "name": "Registrar Cotacao",
+      "typeVersion": 2.5,
+      "position": [
+        300,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO cotacao_item (id_cotacao, seq, descricao, unidade, quantidade)\nSELECT $1::int,\n       e.pos,\n       e.item ->> 'descricao',\n       e.item ->> 'unidade',\n       (e.item ->> 'quantidade')::numeric\n  FROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS e(item, pos);",
+        "options": {
+          "queryReplacement": "={{ [$json.id, JSON.stringify($('Ler JSON da Extracao').first().json.itens)] }}"
+        }
+      },
+      "id": "01000000-0000-4000-8000-000000000005",
+      "name": "Gravar Itens Pedidos",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        300
+      ],
+      "notes": "Um unico INSERT grava a lista inteira de itens, sem repetir o node por item.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH escolhidos AS (\n  SELECT id, nome, conversa_id\n    FROM fornecedor\n   WHERE ativo\n   ORDER BY id\n   LIMIT 3\n), novos_convites AS (\n  INSERT INTO convite (id_cotacao, id_fornecedor)\n  SELECT $1::int, e.id FROM escolhidos e\n  ON CONFLICT (id_cotacao, id_fornecedor) DO NOTHING\n  RETURNING id_fornecedor\n), cotacao_aguardando AS (\n  UPDATE cotacao\n     SET status = 'aguardando', alterado_em = now()\n   WHERE id = $1::int\n  RETURNING id\n)\nSELECT id, nome, conversa_id FROM escolhidos;",
+        "options": {
+          "queryReplacement": "={{ [$('Registrar Cotacao').first().json.id] }}"
+        }
+      },
+      "id": "01000000-0000-4000-8000-000000000006",
+      "name": "Escolher e Convidar Fornecedores",
+      "typeVersion": 2.5,
+      "position": [
+        740,
+        300
+      ],
+      "notes": "Uma linha por fornecedor escolhido. A regra de negocio mora no ORDER BY / LIMIT 3: troque por categoria, rodizio etc. se precisar.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'http://waha:3000/api/' + ($('Entrada do Roteador').first().json.session || 'compras') + '/lids/pn/' + encodeURIComponent($json.conversa_id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "01000000-0000-4000-8000-000000000007",
+      "name": "Consultar LID no WAHA",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Descobre o @lid pelo telefone antes do envio, sem esperar a primeira resposta do fornecedor. Com onError=continue, numero inexistente ou nao resolvido nao trava o envio: so deixa conversa_lid vazio para esse fornecedor.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH gravado AS (\n  UPDATE fornecedor\n     SET conversa_lid = $2::text\n   WHERE id = $1::int\n     AND $2::text IS NOT NULL\n     AND conversa_lid IS DISTINCT FROM $2::text\n)\nSELECT f.id, f.nome, f.conversa_id FROM fornecedor f WHERE f.id = $1::int;",
+        "options": {
+          "queryReplacement": "={{ [$('Escolher e Convidar Fornecedores').item.json.id, $json.lid || null] }}"
+        }
+      },
+      "id": "01000000-0000-4000-8000-000000000008",
+      "name": "Salvar LID Consultado",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        480
+      ],
+      "notes": "Grava apenas quando o lid e novo ou mudou. O SELECT final devolve sempre a linha (id, nome, conversa_id) no formato que 'Montar Texto do Convite' espera, haja UPDATE ou nao, para nenhum fornecedor sair da lista de envio.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pedido = $('Registrar Cotacao').first().json;\nconst extracao = $('Ler JSON da Extracao').first().json;\n\nconst linhas = extracao.itens.map((item, i) => {\n  const qtd = item.quantidade == null\n    ? '(quantidade a confirmar)'\n    : `${item.quantidade}${item.unidade ? ' ' + item.unidade : ''}`;\n  return `${i + 1}. ${item.descricao} - ${qtd}`;\n});\n\nconst cabecalho = [`*Solicitacao de cotacao ${pedido.codigo}*`];\nif (extracao.obra) cabecalho.push(`Obra: ${extracao.obra}`);\n\nconst texto = [\n  ...cabecalho,\n  '',\n  ...linhas,\n  '',\n  'Responda nesta conversa com o preco unitario, o prazo de entrega e a condicao de pagamento. Prazo para responder: 24 horas.'\n].join('\\n');\n\nreturn $input.all().map(({ json: f }) => ({\n  json: { id_fornecedor: f.id, nome_fornecedor: f.nome, conversa_id: f.conversa_id, texto }\n}));"
+      },
+      "id": "01000000-0000-4000-8000-000000000009",
+      "name": "Montar Texto do Convite",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada do Roteador').first().json.session || 'compras', chatId: $json.conversa_id, text: $json.texto }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 60000
+            }
+          }
+        }
+      },
+      "id": "01000000-0000-4000-8000-00000000000a",
+      "name": "WAHA - Enviar Convites",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        300
+      ],
+      "notes": "Uma chamada por fornecedor, espacadas em 60 s (batching), para nao parecer comportamento de robo e arriscar bloqueio do numero.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "maxItems": 1
+      },
+      "id": "01000000-0000-4000-8000-00000000000b",
+      "name": "Reduzir a um Item",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        300
+      ],
+      "type": "n8n-nodes-base.limit"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada do Roteador').first().json.session || 'compras', chatId: $('Entrada do Roteador').first().json.conversa_id, text: 'Cotacao ' + $('Registrar Cotacao').first().json.codigo + ' aberta: ' + $('Ler JSON da Extracao').first().json.itens.length + ' item(ns) e ' + $('Escolher e Convidar Fornecedores').all().length + ' fornecedor(es) convidado(s). Eu aviso aqui quando as propostas chegarem.' }) }}",
+        "options": {}
+      },
+      "id": "01000000-0000-4000-8000-00000000000c",
+      "name": "WAHA - Confirmar Abertura",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    }
+  ],
+  "connections": {
+    "Entrada do Roteador": {
+      "main": [
+        [
+          {
+            "node": "Groq - Listar Itens do Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Listar Itens do Pedido": {
+      "main": [
+        [
+          {
+            "node": "Ler JSON da Extracao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler JSON da Extracao": {
+      "main": [
+        [
+          {
+            "node": "Registrar Cotacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Cotacao": {
+      "main": [
+        [
+          {
+            "node": "Gravar Itens Pedidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Itens Pedidos": {
+      "main": [
+        [
+          {
+            "node": "Escolher e Convidar Fornecedores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escolher e Convidar Fornecedores": {
+      "main": [
+        [
+          {
+            "node": "Consultar LID no WAHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar LID no WAHA": {
+      "main": [
+        [
+          {
+            "node": "Salvar LID Consultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar LID Consultado": {
+      "main": [
+        [
+          {
+            "node": "Montar Texto do Convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Texto do Convite": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Enviar Convites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA - Enviar Convites": {
+      "main": [
+        [
+          {
+            "node": "Reduzir a um Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reduzir a um Item": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Confirmar Abertura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

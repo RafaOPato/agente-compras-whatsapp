@@ -1,0 +1,66 @@
+{
+  "codigo": "COT-260115-0001",
+  "obra": "Residencial Aurora",
+  "endereco": "Rua Exemplo, 100 - Bairro Modelo, Cidade Exemplo",
+  "itens": [
+    { "id": 101, "seq": 1, "descricao": "Cimento CP-II 50kg", "quantidade": 30, "unidade": "sacos" },
+    { "id": 102, "seq": 2, "descricao": "Fio flexível 2,5mm²", "quantidade": 10, "unidade": "rolos" },
+    { "id": 103, "seq": 3, "descricao": "Eletroduto corrugado 3/4\"", "quantidade": 6, "unidade": "rolos" },
+    { "id": 104, "seq": 4, "descricao": "Fita isolante 20m", "quantidade": 12, "unidade": "unidades" }
+  ],
+  "fornecedores": [
+    {
+      "nome": "Fornecedor Alfa Ltda",
+      "telefone": "+55 11 90000-0001",
+      "contato": "Atendimento Alfa",
+      "precos": {
+        "101": { "unit": 32.0 },
+        "102": { "unit": 185.0 },
+        "103": { "unit": 94.0 },
+        "104": { "unit": 4.5 }
+      },
+      "obs_imposto": "Incluso",
+      "valor_frete": 80.0,
+      "frete": "Entrega cobrada à parte",
+      "pct_desconto": 5,
+      "forma_pagamento": "28 dias",
+      "prazo_entrega": "3 dias úteis",
+      "validade": "10 dias"
+    },
+    {
+      "nome": "Fornecedor Beta ME",
+      "telefone": "+55 11 90000-0002",
+      "contato": "Atendimento Beta",
+      "precos": {
+        "101": { "unit": 30.5 },
+        "102": { "unit": 190.0, "total": 1900.0 },
+        "103": { "total": 570.0 },
+        "104": { "unit": 4.2 }
+      },
+      "valor_imposto": 120.0,
+      "obs_imposto": "Imposto destacado à parte",
+      "frete": "CIF",
+      "valor_desconto": 20.0,
+      "observacoes": "Fita isolante de marca própria.",
+      "forma_pagamento": "30/60 dias",
+      "prazo_entrega": "5 dias úteis",
+      "validade": "7 dias"
+    },
+    {
+      "nome": "Fornecedor Gama Ltda",
+      "telefone": "+55 11 90000-0003",
+      "contato": "Atendimento Gama",
+      "precos": {
+        "101": { "unit": 33.0 },
+        "102": { "unit": 175.0 },
+        "104": { "total": 60.0 }
+      },
+      "extras": ["Cola para eletroduto 175g - R$ 18,00"],
+      "obs_imposto": "Incluso",
+      "frete": "A combinar",
+      "forma_pagamento": "À vista",
+      "prazo_entrega": "2 dias úteis",
+      "validade": "5 dias"
+    }
+  ]
+}

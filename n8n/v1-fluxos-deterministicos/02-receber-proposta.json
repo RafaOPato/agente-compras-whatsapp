@@ -1,0 +1,1421 @@
+{
+  "id": "compras-v1-receber-proposta",
+  "name": "Compras v1 - Receber Proposta",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "02000000-0000-4000-8000-000000000001",
+      "name": "Entrada da Resposta do Fornecedor",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id AS id_convite, c.id_cotacao, k.codigo\n  FROM convite c\n  JOIN cotacao k ON k.id = c.id_cotacao\n WHERE c.id_fornecedor = $1::int\n   AND c.status = 'enviado'\n ORDER BY c.convidado_em DESC\n LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [$json.id_fornecedor] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000002",
+      "name": "Achar Convite em Aberto",
+      "typeVersion": 2.5,
+      "position": [
+        -340,
+        300
+      ],
+      "notes": "Se o fornecedor nao tem convite 'enviado', a consulta volta vazia e a execucao termina: mensagem fora de contexto e descartada.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ci.id, ci.seq, ci.descricao, ci.quantidade, ci.unidade\n  FROM cotacao_item ci\n WHERE ci.id_cotacao = $1::int\n ORDER BY ci.seq;",
+        "options": {
+          "queryReplacement": "={{ [$json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000003",
+      "name": "Listar Itens Pedidos",
+      "typeVersion": 2.5,
+      "position": [
+        -120,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "tipo-texto",
+                    "leftValue": "={{ $('Entrada da Resposta do Fornecedor').first().json.com_anexo }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Texto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "tipo-imagem-1",
+                    "leftValue": "={{ $('Entrada da Resposta do Fornecedor').first().json.com_anexo }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "tipo-imagem-2",
+                    "leftValue": "={{ $('Entrada da Resposta do Fornecedor').first().json.tipo_anexo }}",
+                    "rightValue": "image/",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Imagem"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "tipo-pdf-1",
+                    "leftValue": "={{ $('Entrada da Resposta do Fornecedor').first().json.com_anexo }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "tipo-pdf-2",
+                    "leftValue": "={{ $('Entrada da Resposta do Fornecedor').first().json.tipo_anexo }}",
+                    "rightValue": "application/pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PDF"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000004",
+      "name": "Classificar Anexo",
+      "typeVersion": 3.2,
+      "position": [
+        100,
+        300
+      ],
+      "type": "n8n-nodes-base.switch"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "txt1",
+              "name": "conteudo_extrair",
+              "value": "={{ $('Entrada da Resposta do Fornecedor').first().json.texto }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000005",
+      "name": "Texto da Mensagem",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        180
+      ],
+      "type": "n8n-nodes-base.set"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Entrada da Resposta do Fornecedor').first().json.url_anexo }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000006",
+      "name": "Baixar PDF",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        300
+      ],
+      "notes": "Autentica com a credencial Header Auth do WAHA e traz o arquivo como binario.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data"
+      },
+      "id": "02000000-0000-4000-8000-000000000007",
+      "name": "Ler Texto do PDF",
+      "typeVersion": 1,
+      "position": [
+        540,
+        300
+      ],
+      "type": "n8n-nodes-base.extractFromFile"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "txt2",
+              "name": "conteudo_extrair",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000008",
+      "name": "Texto do PDF",
+      "typeVersion": 3.4,
+      "position": [
+        760,
+        300
+      ],
+      "type": "n8n-nodes-base.set"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Entrada da Resposta do Fornecedor').first().json.url_anexo }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000009",
+      "name": "Baixar Foto",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        460
+      ],
+      "notes": "Mesma credencial Header Auth do WAHA; a resposta fica em binario para o proximo node converter.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const arquivo = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nreturn [{ json: { imagem_base64: arquivo.toString('base64') } }];"
+      },
+      "id": "02000000-0000-4000-8000-00000000000a",
+      "name": "Foto em Base64",
+      "typeVersion": 2,
+      "position": [
+        430,
+        460
+      ],
+      "notes": "Ler $binary.data.data numa expressao falha quando o n8n guarda binario em disco; this.helpers.getBinaryDataBuffer devolve o Buffer em qualquer modo, como em 'Preparar Arquivo para WAHA'.",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'meta-llama/llama-4-scout-17b-16e-instruct',\n  response_format: { type: 'json_object' },\n  messages: [\n    { role: 'system', content: [\n      'Voce analisa a foto de um orcamento ou nota enviada por um fornecedor de material de construcao.',\n      'Entrada: a mensagem do usuario traz a lista numerada do que foi pedido e, em seguida, a imagem.',\n      '1. Defina o campo tipo: \"proposta\" quando a imagem mostra ao menos um preco cotado; \"pergunta\" quando e so duvida ou comentario, sem preco algum (por exemplo, se pode trocar um item).',\n      '2. Se for proposta, extraia o total, o prazo de entrega do material, o prazo de execucao do servico (null se nao houver servico), a forma de pagamento, a validade, o frete (numero, quando vier valor), o imposto (valor numerico e uma observacao como \"incluso\"), o desconto (percentual e valor, em numeros), as observacoes gerais e cada item cotado.',\n      '3. Cada item cotado leva descricao, marca, unidade, quantidade, preco unitario, preco total, observacao e numero_item_pedido, que e a posicao do item na lista numerada. Decida pelo contexto, mesmo quando a imagem nao traz o nome completo, e use null se o item nao corresponder a nada do que foi pedido.',\n      '4. Se for pergunta, resuma a duvida em uma frase objetiva no campo resumo_duvida.',\n      'Campos do JSON: tipo (\"proposta\" ou \"pergunta\"); resumo_duvida (texto, usado so em pergunta); total_proposta, frete, valor_imposto, pct_desconto e valor_desconto (numeros); prazo_entrega, prazo_servico, forma_pagamento, validade, obs_imposto e observacoes (textos); itens (lista de objetos com descricao, marca, unidade, observacao, quantidade, preco_unit, preco_total e numero_item_pedido). Todo campo sem informacao na resposta vai como null e itens vai como lista vazia se nao houver item.',\n      'Nunca invente valor. Responda somente com JSON valido, sem texto antes nem depois.'\n    ].join('\\n') },\n    { role: 'user', content: [\n      { type: 'text', text: 'Itens pedidos (numerados):\\n' + $('Listar Itens Pedidos').all().map((it) => it.json.seq + '. ' + it.json.descricao).join('\\n') + '\\n\\nExtraia os dados da imagem conforme as instrucoes.' },\n      { type: 'image_url', image_url: { url: 'data:' + ($('Entrada da Resposta do Fornecedor').first().json.tipo_anexo || 'image/jpeg') + ';base64,' + $json.imagem_base64 } }\n    ] }\n  ]\n}) }}",
+        "options": {
+          "timeout": 120000
+        },
+        "url": "https://api.groq.com/openai/v1/chat/completions"
+      },
+      "id": "02000000-0000-4000-8000-00000000000b",
+      "name": "Groq - Ler Proposta na Foto",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        460
+      ],
+      "notes": "Modelo com visao. Os ids de modelos de visao da Groq mudam com frequencia: se der erro de modelo inexistente, veja a lista atual em console.groq.com/docs/models.",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Groq - Chave (Bearer Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: 'openai/gpt-oss-120b',\n  response_format: { type: 'json_object' },\n  reasoning_effort: 'low',\n  messages: [\n    { role: 'system', content: [\n      'Voce interpreta a resposta de um fornecedor de material de construcao, vinda de uma mensagem de WhatsApp ou do texto extraido de um PDF.',\n      'Entrada: a mensagem do usuario comeca com a lista numerada do que foi pedido e continua com a resposta do fornecedor.',\n      '1. Defina o campo tipo: \"proposta\" quando houver ao menos um preco cotado; \"pergunta\" quando for so duvida ou comentario, sem preco (troca de item, prazo e afins).',\n      '2. Se for proposta, leia o total, o prazo de entrega do material, o prazo de execucao do servico (null se nao houver servico), a forma de pagamento, a validade, o frete (numero, quando vier valor), o imposto (valor numerico e uma observacao como \"incluso\"), o desconto (percentual e valor, em numeros), as observacoes e cada item cotado.',\n      '3. Cada item cotado leva descricao, marca, unidade, quantidade, preco unitario, preco total, observacao e numero_item_pedido, a posicao do item na lista numerada. Use o contexto da conversa: se a lista tinha so \"1. tinta\" e o fornecedor escreve \"as duas latas saem 300\", numero_item_pedido e 1. Sem correspondencia real com a lista, numero_item_pedido e null.',\n      '4. Se for pergunta, escreva em resumo_duvida uma frase objetiva, pronta para o responsavel decidir com sim, nao ou uma resposta curta.',\n      'Campos do JSON: tipo (\"proposta\" ou \"pergunta\"); resumo_duvida (texto, usado so em pergunta); total_proposta, frete, valor_imposto, pct_desconto e valor_desconto (numeros); prazo_entrega, prazo_servico, forma_pagamento, validade, obs_imposto e observacoes (textos); itens (lista de objetos com descricao, marca, unidade, observacao, quantidade, preco_unit, preco_total e numero_item_pedido). Todo campo sem informacao na resposta vai como null e itens vai como lista vazia se nao houver item.',\n      'Nunca invente valor. Responda somente com JSON valido, sem texto antes nem depois.',\n      'Exemplo 1 (proposta explicita) - lista: \"1. Tinta acrilica 18L\"; mensagem: \"Tinta acrilica 18L: R$210,00 a lata, 8 latas fecham R$1680,00. Entrega em 3 dias uteis, pagamento em 30 dias, imposto incluso.\" => {\"tipo\": \"proposta\", \"resumo_duvida\": null, \"total_proposta\": 1680.0, \"prazo_entrega\": \"3 dias uteis\", \"prazo_servico\": null, \"forma_pagamento\": \"30 dias\", \"validade\": null, \"frete\": null, \"valor_imposto\": null, \"obs_imposto\": \"incluso\", \"pct_desconto\": null, \"valor_desconto\": null, \"observacoes\": null, \"itens\": [{\"descricao\": \"Tinta acrilica 18L\", \"marca\": null, \"unidade\": \"lata\", \"quantidade\": 8, \"preco_unit\": 210.0, \"preco_total\": 1680.0, \"observacao\": null, \"numero_item_pedido\": 1}]}',\n      'Exemplo 2 (resposta indireta, so com a unidade) - lista: \"1. massa corrida\"; mensagem: \"as duas latas ficam 300, levo amanha\" => {\"tipo\": \"proposta\", \"resumo_duvida\": null, \"total_proposta\": 300, \"prazo_entrega\": \"amanha\", \"prazo_servico\": null, \"forma_pagamento\": null, \"validade\": null, \"frete\": null, \"valor_imposto\": null, \"obs_imposto\": null, \"pct_desconto\": null, \"valor_desconto\": null, \"observacoes\": null, \"itens\": [{\"descricao\": \"massa corrida\", \"marca\": null, \"unidade\": \"lata\", \"quantidade\": 2, \"preco_unit\": 150, \"preco_total\": 300, \"observacao\": null, \"numero_item_pedido\": 1}]}',\n      'Exemplo 3 (pergunta) - mensagem: \"Nao tenho registro de 3/4, pode ser de 1/2?\" => {\"tipo\": \"pergunta\", \"resumo_duvida\": \"Fornecedor perguntou se pode trocar o registro de 3/4 pelo de 1/2.\", \"total_proposta\": null, \"prazo_entrega\": null, \"prazo_servico\": null, \"forma_pagamento\": null, \"validade\": null, \"frete\": null, \"valor_imposto\": null, \"obs_imposto\": null, \"pct_desconto\": null, \"valor_desconto\": null, \"observacoes\": null, \"itens\": []}'\n    ].join('\\n') },\n    { role: 'user', content: 'Itens pedidos (numerados):\\n' + $('Listar Itens Pedidos').all().map((it) => it.json.seq + '. ' + it.json.descricao).join('\\n') + '\\n\\nResposta do fornecedor:\\n' + $json.conteudo_extrair }\n  ]\n}) }}",
+        "options": {
+          "timeout": 120000
+        },
+        "url": "https://api.groq.com/openai/v1/chat/completions"
+      },
+      "id": "02000000-0000-4000-8000-00000000000c",
+      "name": "Groq - Ler Proposta em Texto",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        240
+      ],
+      "notes": "Usa a mesma credencial Bearer da abertura de cotacao. A entrada conteudo_extrair vem do texto da mensagem ou do texto tirado do PDF.",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Groq - Chave (Bearer Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const conteudo = $json.choices?.[0]?.message?.content;\nif (!conteudo) {\n  throw new Error('Groq respondeu sem choices: ' + JSON.stringify($json));\n}\n\nreturn [{ json: { dados: JSON.parse(conteudo) } }];"
+      },
+      "id": "02000000-0000-4000-8000-00000000000d",
+      "name": "Ler JSON da Proposta",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pergunta1",
+              "leftValue": "={{ $json.dados.tipo }}",
+              "rightValue": "pergunta",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-00000000000e",
+      "name": "E Duvida?",
+      "typeVersion": 2.2,
+      "position": [
+        1420,
+        460
+      ],
+      "type": "n8n-nodes-base.if"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.conversa_id AS conversa_engenheiro, c.codigo AS codigo_cotacao, f.nome AS nome_fornecedor\n  FROM cotacao c\n  JOIN engenheiro e ON e.id = c.id_engenheiro\n CROSS JOIN fornecedor f\n WHERE c.id = $1::int\n   AND f.id = $2::int;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao, $('Entrada da Resposta do Fornecedor').first().json.id_fornecedor] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-00000000000f",
+      "name": "Achar Engenheiro da Duvida",
+      "typeVersion": 2.5,
+      "position": [
+        1640,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pergunta (id_cotacao, id_fornecedor, texto_pergunta)\nVALUES ($1::int, $2::int, $3)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao, $('Entrada da Resposta do Fornecedor').first().json.id_fornecedor, $('Entrada da Resposta do Fornecedor').first().json.texto] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000010",
+      "name": "Gravar Duvida",
+      "typeVersion": 2.5,
+      "position": [
+        1860,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada da Resposta do Fornecedor').first().json.session || 'compras', chatId: $('Achar Engenheiro da Duvida').first().json.conversa_engenheiro, text: 'Duvida de ' + $('Achar Engenheiro da Duvida').first().json.nome_fornecedor + ' na cotacao ' + $('Achar Engenheiro da Duvida').first().json.codigo_cotacao + ':\\n\\n\"' + $('Entrada da Resposta do Fornecedor').first().json.texto + '\"\\n\\nResponda com SIM, NAO ou uma frase curta; a resposta segue para ele sem passar por mais ninguem.' }) }}",
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000011",
+      "name": "WAHA - Levar Duvida ao Engenheiro",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        560
+      ],
+      "notes": "Credencial Header Auth do WAHA. Entrega ao engenheiro a duvida do fornecedor e diz como responder.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada da Resposta do Fornecedor').first().json.session || 'compras', chatId: $('Entrada da Resposta do Fornecedor').first().json.conversa_id, text: 'Anotei sua duvida e levei ao responsavel pela obra. Quando ele responder, eu aviso aqui.' }) }}",
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000012",
+      "name": "WAHA - Pedir Paciencia ao Fornecedor",
+      "typeVersion": 4.2,
+      "position": [
+        2300,
+        560
+      ],
+      "notes": "Credencial Header Auth do WAHA. Encerra o ramo de duvida: nenhuma proposta e gravada e o convite continua 'enviado'.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Liga cada item da proposta a um item do pedido original:\n//  1) pelo numero_item_pedido que o modelo apontou (ele enxerga o contexto da conversa);\n//  2) senao, por semelhanca de texto;\n//  3) sem par confiavel, id_item_pedido fica null (item oferecido por fora do pedido).\nconst pedidos = $('Listar Itens Pedidos').all().map((i) => i.json);\nconst { dados } = $('Ler JSON da Proposta').first().json;\n\nconst limpar = (s) => String(s ?? '').normalize('NFD').replace(/\\p{Diacritic}/gu, '').toLowerCase().trim();\nconst palavras = (s) => s.split(/\\s+/).filter(Boolean);\n\nfunction pontuacao(alvo, candidato) {\n  if (alvo === candidato) return 100;\n  const um_contem_o_outro = alvo.includes(candidato) || candidato.includes(alvo);\n  if (um_contem_o_outro) return 70;\n  const palavrasAlvo = new Set(palavras(alvo));\n  const palavrasCandidato = palavras(candidato);\n  const emComum = palavrasCandidato.filter((p) => palavrasAlvo.has(p)).length;\n  return palavrasCandidato.length ? (emComum / palavrasCandidato.length) * 50 : 0;\n}\n\nfunction maisParecido(descricao) {\n  const alvo = limpar(descricao);\n  let escolhido = null;\n  let maior = 0;\n  for (const pedido of pedidos) {\n    const nota = pontuacao(alvo, limpar(pedido.descricao));\n    if (nota > maior) {\n      maior = nota;\n      escolhido = pedido;\n    }\n  }\n  return maior >= 30 ? escolhido : null;\n}\n\nconst itens = (dados.itens || []).map((it) => {\n  const apontado = it.numero_item_pedido != null ? pedidos.find((p) => p.seq === it.numero_item_pedido) : null;\n  const par = apontado || maisParecido(it.descricao);\n  return {\n    id_item_pedido: par ? par.id : null,\n    descricao: it.descricao,\n    marca: it.marca ?? null,\n    unidade: it.unidade ?? null,\n    quantidade: it.quantidade ?? null,\n    preco_unit: it.preco_unit ?? null,\n    preco_total: it.preco_total ?? null,\n    observacao: it.observacao ?? null\n  };\n});\n\nreturn [{ json: { itens } }];"
+      },
+      "id": "02000000-0000-4000-8000-000000000013",
+      "name": "Parear Itens com Pedido",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        300
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compara o pedido com a proposta.\n//  faltaram: itens pedidos que a proposta nao precificou.\n//  sobraram: itens cotados que nao existem no pedido original.\nconst pedidos = $('Listar Itens Pedidos').all().map((i) => i.json);\nconst { itens: cotados } = $('Parear Itens com Pedido').first().json;\n\nconst cobertos = new Set(cotados.map((c) => c.id_item_pedido).filter((id) => id != null));\nconst faltaram = pedidos.filter((p) => !cobertos.has(p.id));\nconst sobraram = cotados.filter((c) => c.id_item_pedido == null);\n\nconst marcadores = (lista) => lista.map((x) => `- ${x.descricao}`).join('\\n');\nconst blocos = [];\nif (sobraram.length) {\n  blocos.push(`Na sua proposta aparecem itens que nao estavam no pedido:\\n${marcadores(sobraram)}`);\n}\nif (faltaram.length) {\n  blocos.push(`Estes itens foram pedidos e ficaram sem preco na sua proposta:\\n${marcadores(faltaram)}`);\n}\n\nconst ha_divergencia = blocos.length > 0;\nconst aviso = ha_divergencia\n  ? blocos.join('\\n\\n') + '\\n\\nConfirma que e isso mesmo, ou pode mandar um complemento ou correcao?'\n  : null;\n\nreturn [{ json: { ha_divergencia, faltaram, sobraram, aviso } }];"
+      },
+      "id": "02000000-0000-4000-8000-000000000014",
+      "name": "Achar Divergencias",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        180
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "div1",
+              "leftValue": "={{ $json.ha_divergencia }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000015",
+      "name": "Ha Divergencia?",
+      "typeVersion": 2.2,
+      "position": [
+        1860,
+        180
+      ],
+      "type": "n8n-nodes-base.if"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada da Resposta do Fornecedor').first().json.session || 'compras', chatId: $('Entrada da Resposta do Fornecedor').first().json.conversa_id, text: $json.aviso }) }}",
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000016",
+      "name": "WAHA - Contar Divergencia ao Fornecedor",
+      "typeVersion": 4.2,
+      "position": [
+        2080,
+        100
+      ],
+      "notes": "Credencial Header Auth do WAHA. So roda quando ha item fora do pedido ou item pedido sem preco.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO proposta (id_cotacao, id_fornecedor, total_proposta, prazo_entrega, prazo_servico, forma_pagamento,\n                      validade, valor_frete, valor_imposto, obs_imposto, pct_desconto, valor_desconto,\n                      observacoes, texto_bruto, extracao)\nSELECT d.cotacao, d.fornecedor, d.total, d.entrega, d.servico, d.pagamento,\n       d.validade, d.frete, d.imposto, d.obs_imposto, d.pct, d.desconto,\n       d.obs, d.bruto, d.extracao\n  FROM (SELECT $1::int AS cotacao, $2::int AS fornecedor, $3::numeric AS total, $4::text AS entrega,\n               $5::text AS servico, $6::text AS pagamento, $7::text AS validade, $8::numeric AS frete,\n               $9::numeric AS imposto, $10::text AS obs_imposto, $11::numeric AS pct, $12::numeric AS desconto,\n               $13::text AS obs, $14::text AS bruto, $15::jsonb AS extracao) AS d\nON CONFLICT (id_cotacao, id_fornecedor) DO UPDATE\n   SET total_proposta  = EXCLUDED.total_proposta,\n       prazo_entrega   = EXCLUDED.prazo_entrega,\n       prazo_servico   = EXCLUDED.prazo_servico,\n       forma_pagamento = EXCLUDED.forma_pagamento,\n       validade        = EXCLUDED.validade,\n       valor_frete     = EXCLUDED.valor_frete,\n       valor_imposto   = EXCLUDED.valor_imposto,\n       obs_imposto     = EXCLUDED.obs_imposto,\n       pct_desconto    = EXCLUDED.pct_desconto,\n       valor_desconto  = EXCLUDED.valor_desconto,\n       observacoes     = EXCLUDED.observacoes,\n       texto_bruto     = EXCLUDED.texto_bruto,\n       extracao        = EXCLUDED.extracao\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao, $('Entrada da Resposta do Fornecedor').first().json.id_fornecedor, $('Ler JSON da Proposta').first().json.dados.total_proposta, $('Ler JSON da Proposta').first().json.dados.prazo_entrega, $('Ler JSON da Proposta').first().json.dados.prazo_servico, $('Ler JSON da Proposta').first().json.dados.forma_pagamento, $('Ler JSON da Proposta').first().json.dados.validade, $('Ler JSON da Proposta').first().json.dados.frete, $('Ler JSON da Proposta').first().json.dados.valor_imposto, $('Ler JSON da Proposta').first().json.dados.obs_imposto, $('Ler JSON da Proposta').first().json.dados.pct_desconto, $('Ler JSON da Proposta').first().json.dados.valor_desconto, $('Ler JSON da Proposta').first().json.dados.observacoes, $('Entrada da Resposta do Fornecedor').first().json.texto, JSON.stringify($('Ler JSON da Proposta').first().json.dados)] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000017",
+      "name": "Gravar Proposta",
+      "typeVersion": 2.5,
+      "position": [
+        1640,
+        300
+      ],
+      "notes": "Upsert pela chave (cotacao, fornecedor): se o fornecedor reenviar, a versao nova substitui a anterior em vez de criar outra linha.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH limpa AS (\n  DELETE FROM proposta_item WHERE id_proposta = $1::int\n)\nINSERT INTO proposta_item (id_proposta, id_item_pedido, descricao, marca, unidade, quantidade,\n                           preco_unit, preco_total, observacao)\nSELECT $1::int, r.id_item_pedido, r.descricao, r.marca, r.unidade, r.quantidade,\n       r.preco_unit, r.preco_total, r.observacao\n  FROM jsonb_populate_recordset(NULL::proposta_item, $2::jsonb) AS r;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, JSON.stringify($('Parear Itens com Pedido').first().json.itens)] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000018",
+      "name": "Gravar Itens da Proposta",
+      "typeVersion": 2.5,
+      "position": [
+        1860,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE convite\n   SET status = 'respondido', respondeu_em = NOW()\n WHERE id = $1::int\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_convite] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000019",
+      "name": "Fechar Convite como Respondido",
+      "typeVersion": 2.5,
+      "position": [
+        2080,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session: $('Entrada da Resposta do Fornecedor').first().json.session || 'compras', chatId: $('Entrada da Resposta do Fornecedor').first().json.conversa_id, text: 'Recebemos sua proposta, obrigado! Se algo mudar nessa cotacao, a gente avisa por aqui.' }) }}",
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-00000000001a",
+      "name": "WAHA - Acusar Recebimento",
+      "typeVersion": 4.2,
+      "position": [
+        2300,
+        300
+      ],
+      "notes": "Mesma credencial Header Auth do WAHA usada no fluxo de abertura.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS total,\n       COALESCE(SUM((status = 'respondido')::int), 0) AS respondidos,\n       COALESCE(BOOL_AND(status = 'respondido'), false) AS completa\n  FROM convite\n WHERE id_cotacao = $1::int;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-00000000001b",
+      "name": "Contar Convites Respondidos",
+      "typeVersion": 2.5,
+      "position": [
+        2520,
+        300
+      ],
+      "notes": "Roda a cada proposta, nao so na ultima. Substitui a view v_cotacao_fechada (que so listava cotacao 100% respondida): agora sempre voltam total, respondidos e completa, e o mapa parcial segue a cada resposta.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cot.codigo AS codigo_cotacao, cot.obra, cot.endereco\n  FROM cotacao cot\n WHERE cot.id = $1::int;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-00000000001c",
+      "name": "Ler Cabecalho da Cotacao",
+      "typeVersion": 2.5,
+      "position": [
+        3180,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { total, respondidos, completa } = $('Contar Convites Respondidos').first().json;\nconst { codigo_cotacao: codigo } = $('Ler Cabecalho da Cotacao').first().json;\n\nconst caption = completa\n  ? `Mapa de concorrencia da cotacao ${codigo} completo: as ${total} propostas chegaram.`\n  : `Mapa de concorrencia da cotacao ${codigo} atualizado: ${respondidos} de ${total} fornecedores ja responderam.`;\n\nreturn [{ json: { caption } }];"
+      },
+      "id": "02000000-0000-4000-8000-00000000001d",
+      "name": "Montar Legenda do Mapa",
+      "typeVersion": 2,
+      "position": [
+        3620,
+        200
+      ],
+      "notes": "A legenda sai deste node de codigo, e nao do JSON Body do node WAHA: um ternario dentro do corpo fazia o n8n rejeitar o campo ('The value in the JSON Body field is not valid JSON').",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_fornecedor, nome_fornecedor, telefone, nome_contato, total_proposta, valor_frete, valor_imposto, obs_imposto,\n       pct_desconto, valor_desconto, forma_pagamento, prazo_servico, prazo_material, validade, observacoes\n  FROM v_resumo_proposta\n WHERE id_cotacao = $1::int\n ORDER BY nome_fornecedor;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-00000000001e",
+      "name": "Ler Resumo por Fornecedor",
+      "typeVersion": 2.5,
+      "position": [
+        3840,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.id_fornecedor, i.id_item_pedido, i.preco_unit, i.preco_total\n  FROM proposta_item i\n  JOIN proposta p ON p.id = i.id_proposta\n WHERE p.id_cotacao = $1::int\n   AND i.id_item_pedido IS NOT NULL;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-00000000001f",
+      "name": "Ler Precos Cotados",
+      "typeVersion": 2.5,
+      "position": [
+        4060,
+        200
+      ],
+      "alwaysOutputData": true,
+      "notes": "Com alwaysOutputData ligado, se so houver itens fora do pedido (id_item_pedido nulo) a consulta volta sem linhas e o fluxo continua com lista vazia; sem isso o n8n pararia aqui e o Excel nao sairia. 'Montar Corpo do Mapa' trata a lista vazia.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cab = $('Ler Cabecalho da Cotacao').first().json;\nconst pedidos = $('Listar Itens Pedidos').all().map((i) => i.json);\nconst resumos = $('Ler Resumo por Fornecedor').all().map((i) => i.json);\nconst cotados = $('Ler Precos Cotados').all().map((i) => i.json);\n\n// o Postgres devolve NUMERIC como texto\nconst num = (v) => (v == null ? null : Number(v));\n\n// fornecedor -> { id do item pedido -> precos }\nconst precos = {};\nfor (const c of cotados) {\n  if (c.preco_unit == null && c.preco_total == null) continue;\n  precos[c.id_fornecedor] = precos[c.id_fornecedor] || {};\n  precos[c.id_fornecedor][String(c.id_item_pedido)] = { preco_unit: num(c.preco_unit), preco_total: num(c.preco_total) };\n}\n\nreturn [{ json: {\n  codigo_cotacao: cab.codigo_cotacao,\n  obra: cab.obra,\n  endereco: cab.endereco,\n  itens: pedidos.map((p) => ({\n    numero: p.seq,\n    id_item_pedido: p.id,\n    descricao: p.descricao,\n    quantidade: num(p.quantidade),\n    unidade: p.unidade\n  })),\n  fornecedores: resumos.map((r) => ({\n    nome: r.nome_fornecedor,\n    telefone: r.telefone,\n    nome_contato: r.nome_contato,\n    itens: precos[r.id_fornecedor] || {},\n    total_proposta: num(r.total_proposta),\n    valor_frete: num(r.valor_frete),\n    valor_imposto: num(r.valor_imposto),\n    obs_imposto: r.obs_imposto,\n    pct_desconto: num(r.pct_desconto),\n    valor_desconto: num(r.valor_desconto),\n    forma_pagamento: r.forma_pagamento,\n    prazo_servico: r.prazo_servico,\n    prazo_material: r.prazo_material,\n    validade: r.validade,\n    observacoes: r.observacoes\n  }))\n} }];"
+      },
+      "id": "02000000-0000-4000-8000-000000000020",
+      "name": "Montar Corpo do Mapa",
+      "typeVersion": 2,
+      "position": [
+        4280,
+        200
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mapa-service:5000/gerar-mapa",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000021",
+      "name": "Chamar Gerador do Mapa",
+      "typeVersion": 4.2,
+      "position": [
+        4500,
+        200
+      ],
+      "notes": "Chama o servidor HTTP de mapa-concorrencia/servidor_http.py (Python + openpyxl), que responde com o .xlsx em binario.",
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';\nconst arquivo = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst codigo = $('Ler Cabecalho da Cotacao').first().json.codigo_cotacao;\nconst legenda = $('Montar Legenda do Mapa').first().json.caption;\n\nreturn [{ json: { corpoWaha: {\n  session: $('Entrada da Resposta do Fornecedor').first().json.session || 'compras',\n  chatId: $('Ler Destino do Mapa').first().json.conversa_engenheiro,\n  file: {\n    mimetype: XLSX_MIME,\n    filename: `Mapa_Concorrencia_${codigo}.xlsx`,\n    data: arquivo.toString('base64')\n  },\n  caption: legenda\n} } }];"
+      },
+      "id": "02000000-0000-4000-8000-000000000022",
+      "name": "Preparar Arquivo para WAHA",
+      "typeVersion": 2,
+      "position": [
+        4610,
+        200
+      ],
+      "notes": "Com binario em disco, item.binary.data.data nao vem preenchido; getBinaryDataBuffer(0, 'data') devolve o Buffer sempre. Foi o que resolveu o erro do WAHA 'atob: string nao esta corretamente codificada'.",
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.conversa_id AS conversa_engenheiro\n  FROM cotacao c\n  JOIN engenheiro e ON e.id = c.id_engenheiro\n WHERE c.id = $1::int;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000023",
+      "name": "Ler Destino do Mapa",
+      "typeVersion": 2.5,
+      "position": [
+        3400,
+        200
+      ],
+      "notes": "Precisa rodar ANTES de 'Chamar Gerador do Mapa': o node Postgres nao repassa binario, e entre o gerador e o envio ele perderia o .xlsx.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha:3000/api/sendFile",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.corpoWaha) }}",
+        "options": {}
+      },
+      "id": "02000000-0000-4000-8000-000000000024",
+      "name": "WAHA - Enviar Mapa",
+      "typeVersion": 4.2,
+      "position": [
+        4830,
+        200
+      ],
+      "notes": "Credencial Header Auth do WAHA. O corpoWaha (com o Excel em base64) ja vem montado em 'Preparar Arquivo para WAHA'.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "WAHA - Chave (Header Auth)"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE cotacao c\n   SET arquivo_mapa = $2::text,\n       status = COALESCE((SELECT 'enviada' WHERE $3::boolean), c.status),\n       alterado_em = now()\n WHERE c.id = $1::int\nRETURNING c.id;",
+        "options": {
+          "queryReplacement": "={{ [$('Achar Convite em Aberto').first().json.id_cotacao, 'Mapa_Concorrencia_' + $('Ler Cabecalho da Cotacao').first().json.codigo_cotacao + '.xlsx', $('Contar Convites Respondidos').first().json.completa] }}"
+        }
+      },
+      "id": "02000000-0000-4000-8000-000000000025",
+      "name": "Registrar Envio do Mapa",
+      "typeVersion": 2.5,
+      "position": [
+        4940,
+        200
+      ],
+      "notes": "Roda a cada envio, parcial ou final. arquivo_mapa guarda sempre o ultimo mapa mandado; o status so muda para 'enviada' quando completa = true, antes disso a cotacao fica como estava.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    }
+  ],
+  "connections": {
+    "Entrada da Resposta do Fornecedor": {
+      "main": [
+        [
+          {
+            "node": "Achar Convite em Aberto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achar Convite em Aberto": {
+      "main": [
+        [
+          {
+            "node": "Listar Itens Pedidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Itens Pedidos": {
+      "main": [
+        [
+          {
+            "node": "Classificar Anexo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar Anexo": {
+      "main": [
+        [
+          {
+            "node": "Texto da Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Baixar Foto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Baixar PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Texto da Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Groq - Ler Proposta em Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar PDF": {
+      "main": [
+        [
+          {
+            "node": "Ler Texto do PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Texto do PDF": {
+      "main": [
+        [
+          {
+            "node": "Texto do PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Texto do PDF": {
+      "main": [
+        [
+          {
+            "node": "Groq - Ler Proposta em Texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar Foto": {
+      "main": [
+        [
+          {
+            "node": "Foto em Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Foto em Base64": {
+      "main": [
+        [
+          {
+            "node": "Groq - Ler Proposta na Foto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Ler Proposta na Foto": {
+      "main": [
+        [
+          {
+            "node": "Ler JSON da Proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Ler Proposta em Texto": {
+      "main": [
+        [
+          {
+            "node": "Ler JSON da Proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler JSON da Proposta": {
+      "main": [
+        [
+          {
+            "node": "E Duvida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E Duvida?": {
+      "main": [
+        [
+          {
+            "node": "Achar Engenheiro da Duvida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parear Itens com Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achar Engenheiro da Duvida": {
+      "main": [
+        [
+          {
+            "node": "Gravar Duvida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Duvida": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Levar Duvida ao Engenheiro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA - Levar Duvida ao Engenheiro": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Pedir Paciencia ao Fornecedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parear Itens com Pedido": {
+      "main": [
+        [
+          {
+            "node": "Achar Divergencias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Achar Divergencias": {
+      "main": [
+        [
+          {
+            "node": "Ha Divergencia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ha Divergencia?": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Contar Divergencia ao Fornecedor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gravar Proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA - Contar Divergencia ao Fornecedor": {
+      "main": [
+        [
+          {
+            "node": "Gravar Proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Proposta": {
+      "main": [
+        [
+          {
+            "node": "Gravar Itens da Proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Itens da Proposta": {
+      "main": [
+        [
+          {
+            "node": "Fechar Convite como Respondido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fechar Convite como Respondido": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Acusar Recebimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA - Acusar Recebimento": {
+      "main": [
+        [
+          {
+            "node": "Contar Convites Respondidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contar Convites Respondidos": {
+      "main": [
+        [
+          {
+            "node": "Ler Cabecalho da Cotacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Cabecalho da Cotacao": {
+      "main": [
+        [
+          {
+            "node": "Ler Destino do Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Destino do Mapa": {
+      "main": [
+        [
+          {
+            "node": "Montar Legenda do Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Legenda do Mapa": {
+      "main": [
+        [
+          {
+            "node": "Ler Resumo por Fornecedor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Resumo por Fornecedor": {
+      "main": [
+        [
+          {
+            "node": "Ler Precos Cotados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Precos Cotados": {
+      "main": [
+        [
+          {
+            "node": "Montar Corpo do Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Corpo do Mapa": {
+      "main": [
+        [
+          {
+            "node": "Chamar Gerador do Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamar Gerador do Mapa": {
+      "main": [
+        [
+          {
+            "node": "Preparar Arquivo para WAHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Arquivo para WAHA": {
+      "main": [
+        [
+          {
+            "node": "WAHA - Enviar Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA - Enviar Mapa": {
+      "main": [
+        [
+          {
+            "node": "Registrar Envio do Mapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

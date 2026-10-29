@@ -1,0 +1,384 @@
+{
+  "id": "compras-v2-roteador",
+  "name": "Compras v2 - Roteador",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-entrada-agente",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Receber Webhook",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        300
+      ],
+      "webhookId": "REPLACE_ME_WEBHOOK_ID_AGENTE",
+      "type": "n8n-nodes-base.webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reduz o payload do WAHA ao que o fluxo usa. Grupo, mensagem propria (fromMe)\n// e sessao diferente de 'compras' ficam de fora.\nconst mensagens = [];\n\nfor (const entrada of $input.all()) {\n  const corpo = entrada.json.body ?? entrada.json;\n  const msg = corpo.payload ?? {};\n  const sessao = corpo.session ?? 'default';\n\n  if (sessao !== 'compras' || msg.fromMe) continue;\n\n  const origem = msg.from;\n  if (!origem || origem.endsWith('@g.us')) continue;\n\n  mensagens.push({\n    json: {\n      id_msg_waha: msg.id,\n      conversa_id: origem,\n      session: sessao,\n      texto: (msg.body ?? '').trim(),\n      com_anexo: Boolean(msg.hasMedia),\n      url_anexo: msg.media?.url ?? null,\n      tipo_anexo: msg.media?.mimetype ?? null,\n      payload: msg\n    }\n  });\n}\n\nreturn mensagens;"
+      },
+      "id": "10000000-0000-4000-8000-000000000002",
+      "name": "Normalizar Mensagem",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        300
+      ],
+      "type": "n8n-nodes-base.code"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_mensagem AS lm (id_msg_waha, conversa_id, payload, direcao)\nSELECT $1, $2, $3::jsonb, 'in'\nON CONFLICT (id_msg_waha) DO NOTHING\nRETURNING lm.id;",
+        "options": {
+          "queryReplacement": "={{ [$json.id_msg_waha, $json.conversa_id, JSON.stringify($json.payload)] }}"
+        }
+      },
+      "id": "10000000-0000-4000-8000-000000000003",
+      "name": "Gravar Log da Mensagem",
+      "typeVersion": 2.5,
+      "position": [
+        120,
+        300
+      ],
+      "notes": "Webhook repetido pelo WAHA: a restricao UNIQUE de id_msg_waha impede o INSERT de gravar. Nesse caso o node Postgres do n8n devolve um item placeholder ({success: true}) e nao zero itens; por isso o proximo node (Barrar Repetida) so deixa passar item com id numerico e o fluxo termina ali.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dedupe1",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Barrar Repetida",
+      "typeVersion": 2.2,
+      "position": [
+        340,
+        300
+      ],
+      "notes": "O INSERT que nao grava (mensagem repetida) volta do node Postgres como item placeholder, nao como lista vazia. Este filtro so aceita item com id numerico de verdade.",
+      "id": "10000000-0000-4000-8000-000000000004",
+      "type": "n8n-nodes-base.filter"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT papel, id, nome\n  FROM (SELECT 'engenheiro' AS papel, id, nome, conversa_id, conversa_lid, ativo FROM engenheiro\n        UNION ALL\n        SELECT 'fornecedor', id, nome, conversa_id, conversa_lid, ativo FROM fornecedor) AS quem\n WHERE ativo AND $1 IN (conversa_id, conversa_lid);",
+        "options": {
+          "queryReplacement": "={{ [$('Normalizar Mensagem').item.json.conversa_id] }}"
+        }
+      },
+      "id": "10000000-0000-4000-8000-000000000005",
+      "name": "Descobrir Papel pelo Numero",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        300
+      ],
+      "notes": "Funciona como lista de permitidos: se o numero nao esta em engenheiro nem em fornecedor, a consulta volta vazia e a execucao termina neste ponto. O papel sai do numero, nunca do texto da mensagem.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok1",
+              "leftValue": "={{ $json.papel }}",
+              "rightValue": "engenheiro",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "ok2",
+              "leftValue": "={{ $('Normalizar Mensagem').item.json.texto }}",
+              "rightValue": "/^\\s*ok\\s+(COT-\\d{6}-\\d{4})\\s*$/i",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Mensagem e um OK?",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        300
+      ],
+      "notes": "Mesma regra de lerAprovacao em travas/guarda.mjs: so vale a frase exata 'OK COT-AAMMDD-####', e apenas de engenheiro (o papel vem do numero). Qualquer outra mensagem segue direto para o agente.",
+      "id": "10000000-0000-4000-8000-000000000008",
+      "type": "n8n-nodes-base.if"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO aprovacao (id_cotacao, id_engenheiro, id_msg_waha)\nSELECT cot.id, cot.id_engenheiro, $3\n  FROM cotacao cot\n WHERE cot.codigo = $1\n   AND cot.id_engenheiro = $2\n   AND cot.status = 'rascunho'\nON CONFLICT (id_msg_waha) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$('Normalizar Mensagem').item.json.texto.match(/^\\s*ok\\s+(COT-\\d{6}-\\d{4})\\s*$/i)[1].toUpperCase(), $json.id, $('Normalizar Mensagem').item.json.id_msg_waha] }}"
+        }
+      },
+      "id": "10000000-0000-4000-8000-000000000009",
+      "name": "Registrar Aprovacao",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        180
+      ],
+      "notes": "Quem registra a aprovacao e o roteador, a partir do OK do proprio engenheiro; o agente nao tem ferramenta que escreva aqui. So grava se a cotacao for deste engenheiro e ainda estiver em rascunho; do contrario nao grava nada e o fluxo segue (o agente confere a tabela e avisa que falta o OK).",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_CREDENTIAL",
+          "name": "Postgres compras_db"
+        }
+      },
+      "type": "n8n-nodes-base.postgres"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "conversa_id",
+              "value": "={{ $('Normalizar Mensagem').item.json.conversa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "p2",
+              "name": "texto",
+              "value": "={{ $('Normalizar Mensagem').item.json.texto }}",
+              "type": "string"
+            },
+            {
+              "id": "p3",
+              "name": "session",
+              "value": "={{ $('Normalizar Mensagem').item.json.session }}",
+              "type": "string"
+            },
+            {
+              "id": "p4",
+              "name": "id_msg_waha",
+              "value": "={{ $('Normalizar Mensagem').item.json.id_msg_waha }}",
+              "type": "string"
+            },
+            {
+              "id": "p5",
+              "name": "com_anexo",
+              "value": "={{ $('Normalizar Mensagem').item.json.com_anexo }}",
+              "type": "boolean"
+            },
+            {
+              "id": "p6",
+              "name": "url_anexo",
+              "value": "={{ $('Normalizar Mensagem').item.json.url_anexo }}",
+              "type": "string"
+            },
+            {
+              "id": "p7",
+              "name": "tipo_anexo",
+              "value": "={{ $('Normalizar Mensagem').item.json.tipo_anexo }}",
+              "type": "string"
+            },
+            {
+              "id": "p8",
+              "name": "papel",
+              "value": "={{ $('Descobrir Papel pelo Numero').first().json.papel }}",
+              "type": "string"
+            },
+            {
+              "id": "p9",
+              "name": "id_remetente",
+              "value": "={{ $('Descobrir Papel pelo Numero').first().json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "p10",
+              "name": "nome_remetente",
+              "value": "={{ $('Descobrir Papel pelo Numero').first().json.nome }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "name": "Pacote para o Agente",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        300
+      ],
+      "id": "10000000-0000-4000-8000-000000000006",
+      "type": "n8n-nodes-base.set"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "compras-v2-agente",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "name": "Chamar Fluxo do Agente",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        300
+      ],
+      "id": "10000000-0000-4000-8000-000000000007",
+      "type": "n8n-nodes-base.executeWorkflow"
+    }
+  ],
+  "connections": {
+    "Receber Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Gravar Log da Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Log da Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Barrar Repetida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Barrar Repetida": {
+      "main": [
+        [
+          {
+            "node": "Descobrir Papel pelo Numero",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descobrir Papel pelo Numero": {
+      "main": [
+        [
+          {
+            "node": "Mensagem e um OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pacote para o Agente": {
+      "main": [
+        [
+          {
+            "node": "Chamar Fluxo do Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensagem e um OK?": {
+      "main": [
+        [
+          {
+            "node": "Registrar Aprovacao",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pacote para o Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Aprovacao": {
+      "main": [
+        [
+          {
+            "node": "Pacote para o Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
